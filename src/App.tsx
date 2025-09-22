@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 /**
@@ -9,12 +10,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  */
 
 // ---------- Backend config (Option A: direct to service port) ----------
-const BACKEND_BASE =
-  (import.meta as any)?.env?.VITE_BACKEND_BASE || "http://128.119.128.176:8081";
-const SUBMIT_URL = `${BACKEND_BASE}/chatbots`;
-const HEALTH_URL = `${BACKEND_BASE}/health`;
-
+const BACKEND_BASE = "http://128.119.128.176:8081";
+const SUBMIT_URL   = `${BACKEND_BASE}/chatbots`;
+const HEALTH_URL   = `${BACKEND_BASE}/health`;
 // ---------- Types ----------
+
 
 type QAPair = {
   id: string;
@@ -81,8 +81,7 @@ function validateMeta(meta: BotMeta) {
 
 // ---------- Flexible JSON Import ----------
 
-type LooseQ = string | null | undefined;
-type LooseA = string | null | undefined;
+
 
 function coerceStr(x: any): string {
   return (typeof x === "string" ? x : String(x ?? "")).trim();
@@ -101,10 +100,11 @@ function extractQAFromObject(obj: any): { q: string; a: string; tags?: string[] 
 
   let tags: string[] | undefined;
   if (Array.isArray((obj as any).tags)) {
-    tags = (obj as any).tags.map(coerceStr).filter(Boolean);
-    if (!tags.length) tags = undefined;
+    const t = (obj as any).tags.map(coerceStr).filter(Boolean);
+    tags = t.length ? t : undefined;
   }
   return { q, a, tags };
+
 }
 
 function extractQAFromArray(arr: any[]): { q: string; a: string; tags?: string[] } | null {
@@ -116,11 +116,12 @@ function extractQAFromArray(arr: any[]): { q: string; a: string; tags?: string[]
   // optional 3rd item can be tags array or comma string
   let tags: string[] | undefined;
   if (arr.length >= 3) {
-    if (Array.isArray(arr[2])) tags = arr[2].map(coerceStr).filter(Boolean);
-    else tags = coerceStr(arr[2]).split(",").map(s => s.trim()).filter(Boolean);
-    if (!tags.length) tags = undefined;
+    const raw = Array.isArray(arr[2]) ? arr[2] : String(arr[2] ?? "").split(",");
+    const t = raw.map(coerceStr).filter(Boolean);
+    tags = t.length ? t : undefined;
   }
   return { q, a, tags };
+
 }
 
 /**
