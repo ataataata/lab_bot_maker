@@ -602,7 +602,6 @@ export default function App() {
                   <Button onClick={handleSubmit} disabled={!isValid} title={isValid ? "Submit" : "Fill required fields & at least one Q/A"}>
                     Submit
                   </Button>
-                  <Tiny>POST → {SUBMIT_URL.replace(/^https?:\/\//, "")}</Tiny>
                 </div>
               </div>
             </Card>
