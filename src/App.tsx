@@ -601,7 +601,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Button onClick={handleSubmit} disabled={!isValid} title={isValid ? "Submit" : "Fill required fields & at least one Q/A"}>
                     Submit
-                  </Button>
+                  </Button> 
                 </div>
               </div>
             </Card>
