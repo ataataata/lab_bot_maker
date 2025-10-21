@@ -10,11 +10,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  */
 
 // ---------- Backend config (Option A: direct to service port) ----------
-const BACKEND_BASE = "http://128.119.128.176:8081";
-const SUBMIT_URL   = `${BACKEND_BASE}/chatbots`;
-const HEALTH_URL   = `${BACKEND_BASE}/health`;
-// ---------- Types ----------
+const BACKEND_BASE = "/api"; // change to "http://HOST:PORT" if developing without a reverse proxy
+const SUBMIT_URL = `${BACKEND_BASE}/chatbots`;
+const HEALTH_URL = `${BACKEND_BASE}/health`;
 
+// ---------- Types ----------
 
 type QAPair = {
   id: string;
@@ -28,7 +28,7 @@ type BotMeta = {
   botName: string;
   ownerEmail: string;
   description?: string;
-  baseModel: string; // e.g., "qwen2.5:7b-instruct"
+  baseModel: string; // e.g., "gemma3:4b"
   embedModel: string; // e.g., "nomic-embed-text"
   temperature: number;
   topP: number;
@@ -81,8 +81,6 @@ function validateMeta(meta: BotMeta) {
 
 // ---------- Flexible JSON Import ----------
 
-
-
 function coerceStr(x: any): string {
   return (typeof x === "string" ? x : String(x ?? "")).trim();
 }
@@ -104,7 +102,6 @@ function extractQAFromObject(obj: any): { q: string; a: string; tags?: string[] 
     tags = t.length ? t : undefined;
   }
   return { q, a, tags };
-
 }
 
 function extractQAFromArray(arr: any[]): { q: string; a: string; tags?: string[] } | null {
@@ -121,7 +118,6 @@ function extractQAFromArray(arr: any[]): { q: string; a: string; tags?: string[]
     tags = t.length ? t : undefined;
   }
   return { q, a, tags };
-
 }
 
 /**
@@ -148,7 +144,7 @@ function parseAnyQAPairs(jsonText: string): {
         botName: coerceStr(bot.name || ""),
         ownerEmail: coerceStr(bot.owner_email || ""),
         description: coerceStr(bot.description || ""),
-        baseModel: coerceStr(bot.model || "qwen2.5:7b-instruct"),
+        baseModel: coerceStr(bot.model || "gemma3:4b"),
         embedModel: coerceStr(bot.embed_model || "nomic-embed-text"),
         temperature: typeof bot.temperature === "number" ? bot.temperature : 0.2,
         topP: typeof bot.top_p === "number" ? bot.top_p : 0.95,
@@ -304,7 +300,7 @@ function runSelfTests() {
     // email regex sanity + meta validator
     console.assert(/.+@.+\..+/.test("name@umass.edu"), "email regex basic failed");
     const metaBad: BotMeta = { lab: "", botName: "", ownerEmail: "x", description: "", baseModel: "x", embedModel: "y", temperature: 0.2, topP: 0.9 };
-    const metaGood: BotMeta = { lab: "IALS", botName: "Privacy-LLM", ownerEmail: "prof@umass.edu", description: "", baseModel: "qwen2.5:7b-instruct", embedModel: "nomic-embed-text", temperature: 0.2, topP: 0.95 };
+    const metaGood: BotMeta = { lab: "IALS", botName: "Privacy-LLM", ownerEmail: "prof@umass.edu", description: "", baseModel: "gemma3:4b", embedModel: "nomic-embed-text", temperature: 0.2, topP: 0.95 };
     console.assert(!validateMeta(metaBad), "validateMeta should fail for bad meta");
     console.assert(validateMeta(metaGood), "validateMeta should pass for good meta");
 
@@ -319,9 +315,71 @@ function runSelfTests() {
   }
 }
 
+// ---------- Tutorial Page ----------
+
+function Tutorial() {
+  const exampleArray = `[
+  {"q":"What are office hours?","a":"Mon-Fri 2-4pm at 301 ELab.","tags":["policy"]},
+  ["Where is the lab?","IALS, 2nd floor, room 210","location,visit"],
+  {"question":"Who maintains the microscope?","answer":"Dana Smith."}
+]`;
+
+  const exampleJSONL = `{"q":"How do I book?","a":"Use the PPMS portal."}
+["Safety rules?","Wear gloves."]`;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <SectionHeading title="Quick start" subtitle="A 2-minute guide to creating and submitting your bot." />
+        <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-700">
+          <li>Fill <b>Lab / Group</b>, <b>Bot name</b>, and <b>Owner email</b>. (Email must look like <i>name@domain</i>.)</li>
+          <li>Add at least one <b>Q&A pair</b>. Use optional <b>tags</b> to group topics (comma-separated).</li>
+          <li>Optionally <b>Import</b> JSON/JSONL to prefill. Supported formats are below.</li>
+          <li>Click <b>Submit</b>. You’ll see a status banner (success or the exact reason it failed).</li>
+        </ol>
+      </Card>
+
+      <Card>
+        <SectionHeading title="Supported import formats" subtitle="Paste any of these in the Import dialog." />
+        <div className="space-y-4">
+          <div>
+            <div className="mb-1 font-medium">1) Raw array (objects & tuples can mix)</div>
+            <pre className="rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-auto">{exampleArray}</pre>
+          </div>
+          <div>
+            <div className="mb-1 font-medium">2) JSON Lines (JSONL)</div>
+            <pre className="rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-auto">{exampleJSONL}</pre>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionHeading title="Validation rules" />
+        <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
+          <li><b>Meta</b>: Lab, Bot name, and a valid Owner email are required.</li>
+          <li><b>Pairs</b>: Need at least one completed pair (both question and answer non-empty).</li>
+          <li><b>Partials</b>: If a pair is missing Q or A, the banner calls it out (e.g., “Pair #3: Answer is missing.”).</li>
+        </ul>
+      </Card>
+
+      <Card>
+        <SectionHeading title="FAQ" />
+        <div className="space-y-2 text-sm text-gray-700">
+          <p><b>What models are used?</b> We use <code>gemma3:4b</code> for generation and <code>nomic-embed-text</code> for embeddings.</p>
+          <p><b>When will I get my bot?</b> We’ll send you an email with a link to your bot within <b>1 business day</b> after you submit.</p>
+          <p><b>Support</b>: Questions or issues? Email us at <a href="mailto:xx@gmail.com" className="underline">xx@gmail.com</a>.</p>
+          <p><b>Can I reorder pairs?</b> Yes, use the ↑ / ↓ buttons on each pair.</p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ---------- Main Component ----------
 
 export default function App() {
+  // Simple in-app navigation (no router): "builder" | "tutorial"
+  const [page, setPage] = useState<"builder" | "tutorial">("builder");
   // Run lightweight console self-tests once
   useEffect(() => {
     runSelfTests();
@@ -333,7 +391,7 @@ export default function App() {
     botName: "",
     ownerEmail: "",
     description: "",
-    baseModel: "qwen2.5:7b-instruct",
+    baseModel: "gemma3:4b",
     embedModel: "nomic-embed-text",
     temperature: 0.2,
     topP: 0.95,
@@ -396,7 +454,7 @@ export default function App() {
         owner_email: meta?.ownerEmail?.trim() || "",
         description: meta?.description?.trim() || undefined,
         slug,
-        model: meta?.baseModel || "qwen2.5:7b-instruct",
+        model: meta?.baseModel || "gemma3:4b",
         embed_model: meta?.embedModel || "nomic-embed-text",
         temperature: typeof meta?.temperature === "number" ? meta.temperature : 0.2,
         top_p: typeof meta?.topP === "number" ? meta.topP : 0.95,
@@ -411,12 +469,6 @@ export default function App() {
     };
     return payload;
   }, [meta, pairs, slug]);
-
-  const isValid = useMemo(() => {
-    const hasMeta = validateMeta(meta);
-    const hasPairs = pairs.some(p => (p.q || "").trim() && (p.a || "").trim());
-    return Boolean(hasMeta && hasPairs);
-  }, [meta, pairs]);
 
   // Handlers
   function updatePair(id: string, patch: Partial<QAPair>) {
@@ -441,12 +493,49 @@ export default function App() {
     });
   }
 
+  function isBlank(s?: string) {
+    return !(s ?? "").trim();
+  }
+
+  function validateForSubmit(meta: BotMeta, pairs: QAPair[]) {
+    const errors: string[] = [];
+
+    // required meta
+    if (isBlank(meta.lab)) errors.push("Lab / Group is missing.");
+    if (isBlank(meta.botName)) errors.push("Bot name is missing.");
+    if (isBlank(meta.ownerEmail)) {
+      errors.push("Owner email is missing.");
+    } else if (!/.+@.+\..+/.test(meta.ownerEmail)) {
+      errors.push("Owner email looks invalid.");
+    }
+
+    // pairs: at least one complete pair
+    const completed = pairs.filter(p => (p.q || "").trim() && (p.a || "").trim());
+    if (completed.length === 0) {
+      errors.push("Add at least one complete Q/A pair.");
+    }
+
+    // pairs: partials (tell which line is missing what)
+    pairs.forEach((p, i) => {
+      const qBlank = isBlank(p.q);
+      const aBlank = isBlank(p.a);
+      if (qBlank && !aBlank) errors.push(`Pair #${i + 1}: Question is missing.`);
+      if (!qBlank && aBlank) errors.push(`Pair #${i + 1}: Answer is missing.`);
+    });
+
+    return { ok: errors.length === 0, errors };
+  }
+
   async function handleSubmit() {
-    if (!isValid) {
+    const { ok, errors } = validateForSubmit(meta, pairs);
+
+    if (!ok) {
       setSubmitState("error");
-      setSubmitMessage("Please complete Lab, Bot name, Owner email, and at least one Q/A pair.");
+      setSubmitMessage(errors.join(" "));
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* empty */ }
       return;
     }
+
     try {
       setSubmitState("idle");
       setSubmitMessage("");
@@ -461,11 +550,12 @@ export default function App() {
         throw new Error(`HTTP ${res.status}${text ? ` — ${text.slice(0, 200)}` : ""}`);
       }
 
-      // optional: consume response (file name, etc.), but message is fixed per your request
       await res.json().catch(() => ({}));
 
       setSubmitState("success");
-      setSubmitMessage("Request submitted successfully — please allow 1 business day for your customized chatbot to be deployed!");
+      setSubmitMessage(
+        "Request submitted successfully — we’ll email you a link to your bot within 1 business day."
+      );
     } catch (e: any) {
       setSubmitState("error");
       setSubmitMessage(`Submission failed. ${e?.message || e}`);
@@ -474,9 +564,7 @@ export default function App() {
 
   function handleImportJSON() {
     try {
-      // Strip common trailing commas (e.g., after last element in an array/object)
       const sanitized = importText.replace(/,\s*([\]}])/g, "$1");
-
       const { metaPatch, pairs: incoming } = parseAnyQAPairs(sanitized);
 
       if (metaPatch) {
@@ -509,7 +597,7 @@ export default function App() {
       botName: "",
       ownerEmail: "",
       description: "",
-      baseModel: "qwen2.5:7b-instruct",
+      baseModel: "gemma3:4b",
       embedModel: "nomic-embed-text",
       temperature: 0.2,
       topP: 0.95,
@@ -555,7 +643,22 @@ export default function App() {
               <span className="text-xs rounded bg-rose-100 text-rose-700 px-2 py-0.5">backend: unreachable</span>
             )}
           </div>
+          {/* Simple tabs */}
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={page === "builder" ? "default" : "secondary"}
+              onClick={() => setPage("builder")}
+              title="Build"
+            >
+              Builder
+            </Button>
+            <Button
+              variant={page === "tutorial" ? "default" : "secondary"}
+              onClick={() => setPage("tutorial")}
+              title="Tutorial"
+            >
+              Tutorial
+            </Button>
             <Button variant="danger" onClick={handleReset}>Reset</Button>
           </div>
         </div>
@@ -575,95 +678,98 @@ export default function App() {
           </div>
         )}
 
-        {/* Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left column: Meta & Submit */}
-          <div className="lg:col-span-1 space-y-6">
-            <Card>
-              <SectionHeading title="Submit your chatbot" subtitle="Enter details and submit when ready." />
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="lab">Lab / Group</Label>
-                  <Input id="lab" placeholder="e.g., IALS — Light Microscopy Lab" value={meta.lab} onChange={(e) => setMeta({ ...meta, lab: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="botName">Bot name</Label>
-                  <Input id="botName" placeholder="e.g., Microscope Helper" value={meta.botName} onChange={(e) => setMeta({ ...meta, botName: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="email">Owner email</Label>
-                  <Input id="email" type="email" placeholder="name@umass.edu" value={meta.ownerEmail} onChange={(e) => setMeta({ ...meta, ownerEmail: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="desc">Short description</Label>
-                  <Textarea id="desc" placeholder="What should users ask this bot?" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button onClick={handleSubmit} disabled={!isValid} title={isValid ? "Submit" : "Fill required fields & at least one Q/A"}>
-                    Submit
-                  </Button> 
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <SectionHeading title="Import" subtitle="Paste or upload a JSON to continue." />
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={() => setImportOpen(true)}>Paste JSON</Button>
-                  <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Upload JSON</Button>
-                  <input ref={fileInputRef} type="file" accept="application/json" onChange={handleFileOpen} className="hidden" />
-                </div>
-                {selectedFileName && (
-                  <div className="text-xs text-gray-500">Selected: {selectedFileName}</div>
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Right column: Q/A editor */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <SectionHeading title="Q&A pairs" subtitle="Add questions and their answers. Use tags (comma-separated) to group topics or courses." />
-              <div className="space-y-4">
-                {pairs.map((pair, idx) => (
-                  <div key={pair.id} className="rounded-xl border border-gray-200 p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="text-xs font-medium text-gray-500">#{idx + 1}</div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" onClick={() => movePair(pair.id, -1)} disabled={idx === 0} title="Move up">↑</Button>
-                        <Button variant="ghost" onClick={() => movePair(pair.id, 1)} disabled={idx === pairs.length - 1} title="Move down">↓</Button>
-                        <Button variant="danger" onClick={() => removePair(pair.id)} disabled={pairs.length === 1}>Remove</Button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label>Question</Label>
-                        <Textarea placeholder="e.g., What does gain mean and what does it do?" value={pair.q} onChange={(e) => updatePair(pair.id, { q: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label>Answer</Label>
-                        <Textarea placeholder="Gain refers to the voltage applied to the detector. If the gain is too low, you won't see photons. If it's too high, you might see more photons..." value={pair.a} onChange={(e) => updatePair(pair.id, { a: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <Label>Tags (optional)</Label>
-                      <Input
-                        placeholder="comma,separated,tags  (e.g., syllabus, office-hours, policy)"
-                        value={(pair.tags || []).join(",")}
-                        onChange={(e) => updatePair(pair.id, { tags: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                      />
-                    </div>
+        {page === "tutorial" ? (
+          <Tutorial />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Left column: Meta & Submit */}
+            <div className="lg:col-span-1 space-y-6">
+              <Card>
+                <SectionHeading title="Submit your chatbot" subtitle="Enter details and submit when ready." />
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="lab">Lab / Group</Label>
+                    <Input id="lab" placeholder="e.g., IALS — Light Microscopy Lab" value={meta.lab} onChange={(e) => setMeta({ ...meta, lab: e.target.value })} />
                   </div>
-                ))}
-                <div className="flex items-center justify-between">
-                  <Button variant="secondary" onClick={addPair}>+ Add another pair</Button>
-                  <Tiny>{pairs.length} pair{pairs.length === 1 ? "" : "s"}</Tiny>
+                  <div>
+                    <Label htmlFor="botName">Bot name</Label>
+                    <Input id="botName" placeholder="e.g., Microscope Helper" value={meta.botName} onChange={(e) => setMeta({ ...meta, botName: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">Owner email</Label>
+                    <Input id="email" type="email" placeholder="name@umass.edu" value={meta.ownerEmail} onChange={(e) => setMeta({ ...meta, ownerEmail: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="desc">Short description</Label>
+                    <Textarea id="desc" placeholder="What should users ask this bot?" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={handleSubmit} title="Submit">
+                      Submit
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              <Card>
+                <SectionHeading title="Import" subtitle="Paste or upload a JSON to continue." />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" onClick={() => setImportOpen(true)}>Paste JSON</Button>
+                    <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Upload JSON</Button>
+                    <input ref={fileInputRef} type="file" accept="application/json" onChange={handleFileOpen} className="hidden" />
+                  </div>
+                  {selectedFileName && (
+                    <div className="text-xs text-gray-500">Selected: {selectedFileName}</div>
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            {/* Right column: Q/A editor */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <SectionHeading title="Q&A pairs" subtitle="Add questions and their answers. Use tags (comma-separated) to group topics or courses." />
+                <div className="space-y-4">
+                  {pairs.map((pair, idx) => (
+                    <div key={pair.id} className="rounded-xl border border-gray-200 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="text-xs font-medium text-gray-500">#{idx + 1}</div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" onClick={() => movePair(pair.id, -1)} disabled={idx === 0} title="Move up">↑</Button>
+                          <Button variant="ghost" onClick={() => movePair(pair.id, 1)} disabled={idx === pairs.length - 1} title="Move down">↓</Button>
+                          <Button variant="danger" onClick={() => removePair(pair.id)} disabled={pairs.length === 1}>Remove</Button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <Label>Question</Label>
+                          <Textarea placeholder="e.g., What does gain mean and what does it do?" value={pair.q} onChange={(e) => updatePair(pair.id, { q: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>Answer</Label>
+                          <Textarea placeholder="Gain refers to the voltage applied to the detector. If the gain is too low, you won't see photons. If it's too high, you might see more photons..." value={pair.a} onChange={(e) => updatePair(pair.id, { a: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <Label>Tags (optional)</Label>
+                        <Input
+                          placeholder="comma,separated,tags  (e.g., syllabus, office-hours, policy)"
+                          value={(pair.tags || []).join(",")}
+                          onChange={(e) => updatePair(pair.id, { tags: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between">
+                    <Button variant="secondary" onClick={addPair}>+ Add another pair</Button>
+                    <Tiny>{pairs.length} pair{pairs.length === 1 ? "" : "s"}</Tiny>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Import modal */}
         {importOpen && (
